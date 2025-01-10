@@ -1,0 +1,139 @@
+//
+//  SignupView.swift
+//  Axeno
+//
+//  Created by Thomas Leary on 25/9/2024.
+//
+
+import SwiftUI
+
+struct SignupView: View {
+    @State private var name: String = ""
+    @State private var email: String = ""
+    @State private var emailExists: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var isLoading: Bool = false
+    @State private var navigateToMasterPassword: Bool = false
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("Signup")
+                    .font(.largeTitle)
+                
+                TextField("Name", text: $name)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                
+                TextField("Email", text: $email)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                    .keyboardType(.emailAddress)
+                    .onChange(of: email) {
+                        emailExists = false
+                        errorMessage = ""
+                    }
+                
+                if emailExists {
+                    Text("Email already exists")
+                        .foregroundColor(.red)
+                        .padding(.top, 5)
+                }
+                
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                }
+                
+                if isLoading {
+                    ProgressView()
+                }
+                
+                Button(action: checkEmail) {
+                    Text("Next")
+                        .font(.title2)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.top, 20)
+                .disabled(name.isEmpty || email.isEmpty || isLoading)
+            }
+            .padding()
+            .navigationDestination(isPresented: $navigateToMasterPassword) {
+                MasterPasswordView(name: name, email: email)
+            }
+        }
+    }
+    
+
+    func checkEmail() {
+        isLoading = true
+        guard let url = URL(string: "http://1.1.1.1:3000/check-email") else {
+            errorMessage = "Invalid URL"
+            isLoading = false
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["email": email]
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: body, options: [])
+            request.httpBody = jsonData
+        } catch {
+            errorMessage = "Error encoding data: \(error)"
+            isLoading = false
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                isLoading = false
+            }
+            
+            if let error = error {
+                DispatchQueue.main.async {
+                    errorMessage = "Request failed: \(error)"
+                }
+                return
+            }
+            
+            guard let response = response as? HTTPURLResponse else {
+                DispatchQueue.main.async {
+                    errorMessage = "Invalid response"
+                }
+                return
+            }
+            
+            if response.statusCode == 200 {
+           
+                DispatchQueue.main.async {
+                    emailExists = false
+                    errorMessage = ""
+                    navigateToMasterPassword = true
+                }
+            } else if response.statusCode == 400 {
+      
+                DispatchQueue.main.async {
+                    emailExists = true
+                    errorMessage = ""
+                }
+            } else {
+                DispatchQueue.main.async {
+                    errorMessage = "Unexpected error: \(response.statusCode)"
+                }
+            }
+        }
+        
+        task.resume()
+    }
+}
